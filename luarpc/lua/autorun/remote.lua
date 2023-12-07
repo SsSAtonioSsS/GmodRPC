@@ -1,5 +1,5 @@
 if not SERVER then return end
-local mp = include('libs/sh_messagepack.lua')
+local mp = include('libs/msgpack/sh_messagepack.lua')
 local to_hex, from_hex
 
 do
