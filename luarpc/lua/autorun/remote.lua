@@ -1,6 +1,7 @@
 if not SERVER then return end
 local mp = include('libs/sh_messagepack.lua')
 local to_hex, from_hex
+
 do
     local byte = string.byte
     local gsub = string.gsub
@@ -27,27 +28,31 @@ local function unpacknil(t, i, j)
     if i <= j then return v, unpacknil(t, i + 1, j) end
 end
 
-local sendCB = function(uuid, data)
-    local inf = {
-        uuid = uuid,
-        result = data
-    }
-
-    HTTP(
-        {
-            failed = function(err)
-                print(err)
-            end,
-            success = function(c, b)
-                if c ~= 200 then return print("Error " .. b) end
-            end,
-            method = "POST",
-            url = "http://192.168.50.50:8081/callback",
-            body = util.TableToJSON(inf),
-            type = "application/json",
-            headers = {}
+local sendCB
+do
+    local web_ip, web_port = "192.168.x.x", 8081 -- Or Global IP
+    sendCB = function(uuid, data)
+        local inf = {
+            uuid = uuid,
+            result = data
         }
-    )
+
+        HTTP(
+            {
+                failed = function(err)
+                    print(err)
+                end,
+                success = function(c, b)
+                    if c ~= 200 then return print("Error " .. b) end
+                end,
+                method = "POST",
+                url = "http://" .. web_ip .. ":" .. web_port .. "/callback", -- Or use without port
+                body = util.TableToJSON(inf),
+                type = "application/json",
+                headers = {}
+            }
+        )
+    end
 end
 
 local function RemoteFunction(p, _, data, _)
