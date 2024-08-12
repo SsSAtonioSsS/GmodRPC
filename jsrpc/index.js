@@ -16,7 +16,6 @@ const bodyparser = require('koa-bodyparser');
 const sUID = new (require('short-unique-id'))({ length: uid_len });
 const { EventEmitter } = require('events');
 const { Rcon } = require('rcon-client');
-const msgpack = require('msgpack-lite');
 
 const app = new Koa();
 const router = new Router();
@@ -40,7 +39,7 @@ router.post('/send', async (ctx) => {
     const { functionName, args } = ctx.request.body;
     if (functionName === 'lua_run') {
         ctx.status = 401;
-        ctx.body = 'lua_run not allowed!';
+        ctx.body = 'lua_run is forbidden, use /execlua instead!';
         return;
     }
     const data = typeof args === 'object' ? Object.values(args).join(' ') : args;
