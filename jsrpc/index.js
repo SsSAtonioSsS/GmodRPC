@@ -79,7 +79,7 @@ router.post('/execlua', async (ctx) => {
         });
 
         ctx.status = 200;
-        ctx.body = { result: finalResult };
+        ctx.body = finalResult;
     } catch (error) {
         ctx.status = 504;
         ctx.body = 'Timeout exceeded';
