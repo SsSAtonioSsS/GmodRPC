@@ -14,6 +14,13 @@ function webluaexec.clearResults(uuid)
     if webluaexec.results[uuid] then webluaexec.results[uuid] = nil end
 end
 
+local function formatLine(str, line)
+    str = string.Split(str, ":")
+    local name, line_r = str[1], tonumber(str[2]) - line
+    str = table.move(str, 3, #str, 1, {})
+    return name .. ":" .. line_r .. ":" .. table.concat(str, ":")
+end
+
 local function execRemoteLua(ply, _, args)
     if IsValid(ply) then
         if ply:IsPlayer() then
@@ -23,6 +30,7 @@ local function execRemoteLua(ply, _, args)
         end
         return
     end
+
     local uuid = args[1]
     if not uuid or not isstring(uuid) or string.len(uuid) ~= 10 then
         webluaexec.sendCallback(uuid, {
@@ -32,7 +40,6 @@ local function execRemoteLua(ply, _, args)
     end
 
     webluaexec.getLuaData(uuid, function(lua_string)
-
         if not lua_string or isstring(lua_string) and string.len(lua_string) == 0 then
             webluaexec.sendCallback(uuid, {
                 err = "luastring empty"
@@ -41,19 +48,19 @@ local function execRemoteLua(ply, _, args)
         end
 
         local printInit = [[local _print, _ptbl = print, PrintTable
-        local print, PrintTable = function(...)
-            webluaexec.pushResult("]] .. uuid .. [[", {...})
-            _print(...)
-        end, function(tbl, indent, done)
-            webluaexec.pushResult("]] .. uuid .. [[", tbl)
-            _ptbl(tbl, indent, done)
-        end
-        ]]
-
+            local print, PrintTable = function(...)
+                webluaexec.pushResult("]] .. uuid .. [[", {...})
+                _print(...)
+            end, function(tbl, indent, done)
+                webluaexec.pushResult("]] .. uuid .. [[", tbl)
+                _ptbl(tbl, indent, done)
+            end
+            ]]
+        local initLen = #string.Split(printInit, "\n") - 1
         local func = CompileString(printInit .. lua_string, nil, false)
         if not isfunction(func) then
             webluaexec.sendCallback(uuid, {
-                err = func,
+                err = formatLine(func, initLen),
                 debug = webluaexec.getResults(uuid)
             })
 
@@ -73,7 +80,7 @@ local function execRemoteLua(ply, _, args)
             return
         else
             webluaexec.sendCallback(uuid, {
-                err = data,
+                err = formatLine(data, initLen),
                 debug = webluaexec.getResults(uuid)
             })
 
