@@ -1,14 +1,8 @@
 require('dotenv').config();
-const { assert } = require('console');
 
 const port = process.env.APP_PORT || 3000;
 const ip = process.env.APP_IP || "127.0.0.1";
-const server_ip = process.env.GM_IP;
-const server_port = process.env.GM_PORT;
 const uid_len = process.env.UID_LENGTH || 10;
-
-assert(server_ip, "Gmod server ip is empty");
-assert(server_port, "Gmod server port is empty");
 
 const Koa = require('koa');
 const Router = require('koa-router');
@@ -16,6 +10,7 @@ const bodyparser = require('koa-bodyparser');
 const sUID = new (require('short-unique-id'))({ length: uid_len });
 const { EventEmitter } = require('events');
 const { Rcon } = require('rcon-client');
+const { isIP } = require('net');
 
 const app = new Koa();
 const router = new Router();
@@ -35,19 +30,42 @@ router.post('/callback', async (ctx) => {
     ctx.body = 'Received';
 });
 
-router.post('/send', async (ctx) => {
-    const { functionName, args } = ctx.request.body;
-    if (functionName === 'lua_run') {
-        ctx.status = 401;
-        ctx.body = 'lua_run is forbidden, use /execlua instead!';
+router.post('/rcon', async (ctx) => {
+    const { cmd, rcon, ip, port } = ctx.request.body;
+    if (typeof ip !== 'string' || isIP(ip) !== 4) {
+        ctx.status = 400;
+        ctx.body = { msg: 'Specify the correct IP' };
         return;
     }
-    const data = typeof args === 'object' ? Object.values(args).join(' ') : args;
+
+    if (port < 0 || port > 65535) {
+        ctx.status = 400;
+        ctx.body = { msg: 'Specify the correct port [0-65535]' };
+        return;
+    }
+
+    if (typeof rcon !== 'string' || rcon.length == 0) {
+        ctx.status = 400;
+        ctx.body = { msg: 'Specify the correct RCON password' };
+        return;
+    }
+
+    if (typeof cmd !== 'string' || cmd.length === 0) {
+        ctx.status = 400;
+        ctx.body = { msg: 'Cmd is empty' };
+        return;
+    }
+
+    if (cmd.split(' ')[0] === 'lua_run') {
+        ctx.status = 401;
+        ctx.body = { msg: 'lua_run is forbidden, use /execlua instead!' };
+        return;
+    }
 
     try {
-        const result = await sendToGMOD(false, undefined, functionName, data);
+        const result = await sendToGMOD(undefined, cmd, ip, port, rcon);
         ctx.status = 200;
-        ctx.body = { result };
+        ctx.body = { data: result };
     } catch (err) {
         ctx.status = 500;
         ctx.body = err;
@@ -55,7 +73,26 @@ router.post('/send', async (ctx) => {
 });
 
 router.post('/execlua', async (ctx) => {
-    const { lua } = ctx.request.body;
+    const { lua, rcon, ip, port } = ctx.request.body;
+
+    if (typeof ip !== 'string' || isIP(ip) !== 4) {
+        ctx.status = 400;
+        ctx.body = { msg: 'Specify the correct IP' };
+        return;
+    }
+
+    if (port < 0 || port > 65535) {
+        ctx.status = 400;
+        ctx.body = { msg: 'Specify the correct port [0-65535]' };
+        return;
+    }
+
+    if (typeof rcon !== 'string' || rcon.length == 0) {
+        ctx.status = 400;
+        ctx.body = { msg: 'Specify the correct RCON password' };
+        return;
+    }
+
     if (!lua || typeof lua !== 'string') {
         ctx.status = 400
         ctx.body = { msg: `\`lua\` not a string` }
@@ -75,7 +112,7 @@ router.post('/execlua', async (ctx) => {
                 clearTimeout(timeoutId);
                 resolve(result);
             });
-            sendToGMOD(uuid).catch(reject);
+            sendToGMOD(uuid, undefined, ip, port, rcon).catch(reject);
         });
 
         ctx.status = 200;
@@ -112,15 +149,15 @@ app.listen(port, ip, () => {
     console.log(`Server started, ${port}`);
 });
 
-async function sendToGMOD(uuid) {
+async function sendToGMOD(uuid, cmd, ip, port, rcon_pwd) {
     const rcon = new Rcon({
-        host: server_ip,
-        port: server_port,
-        password: '12345',
+        host: ip,
+        port: port,
+        password: rcon_pwd,
     });
 
     try {
-        const command = `execlua ${uuid}`
+        const command = cmd ? cmd : `execlua ${uuid}`
         await rcon.connect();
         return await rcon.send(command);
     } finally {
