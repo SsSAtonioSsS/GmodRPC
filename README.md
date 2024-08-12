@@ -1,4 +1,4 @@
-Implementation of sending RPC to the Garry's Mod server.
+Simple implementation of sending RPC to the Garry's Mod server.
 Required:
 1. Gmod
 2. NodeJS
