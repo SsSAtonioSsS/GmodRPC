@@ -4,4 +4,5 @@ Required:
 2. NodeJS
 
 Allows you to send RCON messages to the server and receive responses via HTTP.
+
 _May contain a lot of bugs._
