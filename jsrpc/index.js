@@ -13,7 +13,7 @@ assert(server_port, "Gmod server port is empty");
 const Koa = require('koa');
 const Router = require('koa-router');
 const bodyparser = require('koa-bodyparser');
-const sUID = new (require('short-unique-id'))({length: uid_len});
+const sUID = new (require('short-unique-id'))({ length: uid_len });
 const { EventEmitter } = require('events');
 const { Rcon } = require('rcon-client');
 const msgpack = require('msgpack-lite');
@@ -26,7 +26,7 @@ const uuidPool = new Map();
 
 router.post('/callback', async (ctx) => {
     const { uuid, result } = ctx.request.body;
-    if(!markUuidAsCompleted(uuid, result)) {
+    if (!markUuidAsCompleted(uuid, result)) {
         ctx.status = 401;
         ctx.body = 'Invalid UUID';
         return;
@@ -37,44 +37,48 @@ router.post('/callback', async (ctx) => {
 });
 
 router.post('/send', async (ctx) => {
-  const { type, functionName, args } = ctx.request.body;
-    if (type !== 'function') {
-        if (functionName === 'lua_run')
-        {
-            ctx.status = 401;
-            ctx.body = 'lua_run not allowed!';
-            return;
-        }
-        const data = typeof args === 'object' ? Object.values(args).join(' ') : args;
-        
-        try {
-            const result = await sendToGMOD(false, undefined, functionName, data);
-            ctx.status = 200;
-            ctx.body = {result};
-        } catch (err) {
-            ctx.status = 500;
-            ctx.body = err;
-        }
+    const { functionName, args } = ctx.request.body;
+    if (functionName === 'lua_run') {
+        ctx.status = 401;
+        ctx.body = 'lua_run not allowed!';
+        return;
+    }
+    const data = typeof args === 'object' ? Object.values(args).join(' ') : args;
+
+    try {
+        const result = await sendToGMOD(false, undefined, functionName, data);
+        ctx.status = 200;
+        ctx.body = { result };
+    } catch (err) {
+        ctx.status = 500;
+        ctx.body = err;
+    }
+});
+
+router.post('/execlua', async (ctx) => {
+    const { lua } = ctx.request.body;
+    if (!lua || typeof lua !== 'string') {
+        ctx.status = 400
+        ctx.body = { msg: `\`lua\` not a string` }
         return
     }
 
     const uuid = sUID.rnd();
-
-    markUuidAsStarted(uuid);
+    markUuidAsStarted(uuid, lua);
 
     try {
         const finalResult = await new Promise((resolve, reject) => {
-        const timeoutId = setTimeout(() => {
-            reject(new Error('Timeout exceeded'));
-        }, 30000);
+            const timeoutId = setTimeout(() => {
+                reject(new Error('Timeout exceeded'));
+            }, 30000);
 
-        eventEmitter.once(`operationComplete:${uuid}`, (result) => {
-            clearTimeout(timeoutId);
-            resolve(result);
+            eventEmitter.once(`operationComplete:${uuid}`, (result) => {
+                clearTimeout(timeoutId);
+                resolve(result);
+            });
+            sendToGMOD(uuid).catch(reject);
         });
-        sendToGMOD(true, uuid, functionName, args).catch(reject);
-        });
-        
+
         ctx.status = 200;
         ctx.body = { result: finalResult };
     } catch (error) {
@@ -83,7 +87,17 @@ router.post('/send', async (ctx) => {
     } finally {
         markUuidAsCompleted(uuid);
     }
-});
+})
+
+router.get('/luastring/:uuid', (ctx) => {
+    const uuid = ctx.params.uuid;
+
+    if (!getUuidStatus(uuid)) {
+        return ctx.status = 404;
+    }
+    ctx.status = 200;
+    ctx.body = { lua: getUuidData(uuid) }
+})
 
 router.get('/uuid-status/:uuid', (ctx) => {
     const uuid = ctx.params.uuid;
@@ -99,16 +113,15 @@ app.listen(port, ip, () => {
     console.log(`Server started, ${port}`);
 });
 
-async function sendToGMOD(isFunc, uuid, functionName, args) {
+async function sendToGMOD(uuid) {
     const rcon = new Rcon({
         host: server_ip,
         port: server_port,
-        password: 'ziLYruAXTG0FFer4',
+        password: '12345',
     });
 
     try {
-        args = args ?? (isFunc ? {} : '')
-        const command = isFunc?`rfunc ${uuid} ${functionName} ${msgpack.encode(args).toString('hex')}`:`${functionName} ${args}`;
+        const command = `execlua ${uuid}`
         await rcon.connect();
         return await rcon.send(command);
     } finally {
@@ -116,8 +129,8 @@ async function sendToGMOD(isFunc, uuid, functionName, args) {
     }
 }
 
-function markUuidAsStarted(uuid) {
-    uuidPool.set(uuid, 'started');
+function markUuidAsStarted(uuid, data = 'started') {
+    uuidPool.set(uuid, data);
 }
 
 function markUuidAsCompleted(uuid, result) {
@@ -129,4 +142,8 @@ function markUuidAsCompleted(uuid, result) {
 
 function getUuidStatus(uuid) {
     return uuidPool.has(uuid);
+}
+
+function getUuidData(uuid) {
+    return uuidPool.get(uuid)
 }
